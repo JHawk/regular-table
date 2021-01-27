@@ -46,7 +46,7 @@ impl RegularBodyViewModel {
         }
     }
 
-    pub fn _draw_td(&mut self, tag_name: &JsValue, ridx: usize, val: &JsValue, cidx: usize, column_name: &JsValue, ridx_offset: usize, size_key: &JsValue) -> Result<js_sys::Object, JsValue> {
+    fn _draw_td(&mut self, tag_name: &JsValue, ridx: usize, val: &JsValue, cidx: usize, column_name: &JsValue, ridx_offset: usize, size_key: &JsValue) -> Result<(web_sys::HtmlElement, js_sys::Object), JsValue> {
         let td = self.view_model._get_cell(tag_name, ridx, cidx);
         let metadata = self.view_model._get_or_create_metadata(&td);
         Reflect::set(&metadata, js_intern!("y"), &JsValue::from_f64((ridx + ridx_offset) as f64))?;
@@ -92,11 +92,7 @@ impl RegularBodyViewModel {
         }
 
         Reflect::set(&metadata, js_intern!("value"), val)?;
-
-        let ret_obj = js_sys::Object::new();
-        Reflect::set(&ret_obj, js_intern!("td"), &td)?;
-        Reflect::set(&ret_obj, js_intern!("metadata"), &metadata)?;
-        Ok(ret_obj)
+        Ok((td, metadata))
     }
 
     pub fn draw(
@@ -116,7 +112,7 @@ impl RegularBodyViewModel {
         let mut row_height = Reflect::get(&view_state, js_intern!("row_height"))?;
         let mut metadata: Option<js_sys::Object> = None;
         let mut ridx_offset: Vec<u32> = vec![];
-        let mut tds: Vec<js_sys::Object> = vec![];
+        let mut tds: Vec<(web_sys::HtmlElement, js_sys::Object)> = vec![];
         let mut ridx: usize = 0;
         let mut cidx_offset: Vec<u32> = vec![];
         let iterations = if th {
@@ -135,7 +131,7 @@ impl RegularBodyViewModel {
                     row_headers.clone().unchecked_into::<js_sys::Array>().get(ridx as u32)
                 };
 
-                let mut obj: Option<js_sys::Object> = None;
+                let mut obj: Option<(web_sys::HtmlElement, js_sys::Object)> = None;
                 if th {
                     let row_header = _val.clone().unchecked_into::<js_sys::Array>().get(i);
 
@@ -193,10 +189,9 @@ impl RegularBodyViewModel {
                             _view_state_ridx_offset,
                             &JsValue::from_f64(i as f64),
                         )?;
-                        obj = Some(_obj.clone());
-                        let _obj_td = Reflect::get(&_obj, js_intern!("td"))?.dyn_into::<web_sys::HtmlElement>()?;
-                        let _obj_metadata = Reflect::get(&_obj, js_intern!("metadata"))?.dyn_into::<js_sys::Object>()?;
+                        let (_obj_td, _obj_metadata) = _obj.clone();
 
+                        obj = Some(_obj.clone());
                         _obj_td.style().set_property("display", "")?;
                         _obj_td.remove_attribute("rowspan")?;
                         _obj_td.remove_attribute("colspan")?;
@@ -232,14 +227,13 @@ impl RegularBodyViewModel {
                     let _view_state_ridx_offset = Reflect::get(&view_state, js_intern!("ridx_offset"))?.as_f64().unwrap() as usize;
                     let _view_state_x1 = Reflect::get(&view_state, js_intern!("x1"))?.as_f64().unwrap() as usize;
                     let _view_state_y1 = Reflect::get(&view_state, js_intern!("y1"))?.as_f64().unwrap() as usize;
-
                     let _obj = self._draw_td(js_intern!("TD"), ridx, &_val, cidx as usize, &_column_state_column_name, _view_state_ridx_offset, &size_key)?;
+
                     ridx = ridx + 1;
 
+                    let (_obj_td, _obj_metadata) = _obj.clone();
                     obj = Some(_obj.clone());
 
-                    let _obj_td = Reflect::get(&_obj, js_intern!("td"))?.dyn_into::<web_sys::HtmlElement>()?;
-                    let _obj_metadata = Reflect::get(&_obj, js_intern!("metadata"))?.dyn_into::<js_sys::Object>()?;
                     let _obj_metadata_y = Reflect::get(&_obj_metadata, js_intern!("y"))?.as_f64().unwrap();
 
                     Reflect::set(&_obj_metadata, js_intern!("x"), x)?;
@@ -259,12 +253,11 @@ impl RegularBodyViewModel {
                 }
 
                 metadata = match obj {
-                    Some(x) => {
+                    Some((_obj_td, _obj_metadata)) => {
                         if row_height.is_undefined() {
-                            let _obj_td = Reflect::get(&x, js_intern!("td"))?.unchecked_into::<web_sys::HtmlElement>();
                             row_height = JsValue::from_f64(_obj_td.offset_height() as f64);
                         }
-                        Some(Reflect::get(&x, js_intern!("metadata"))?.unchecked_into::<js_sys::Object>())
+                        Some(_obj_metadata)
                     }
                     None => metadata,
                 };
@@ -279,8 +272,11 @@ impl RegularBodyViewModel {
 
         let ret_obj = js_sys::Object::new();
         let array = js_sys::Array::new();
-        for td in tds {
-            array.push(&td);
+        for (td, metadata) in tds {
+            let ret_obj = js_sys::Object::new();
+            Reflect::set(&ret_obj, js_intern!("td"), &td)?;
+            Reflect::set(&ret_obj, js_intern!("metadata"), &metadata)?;
+            array.push(&ret_obj);
         }
         Reflect::set(&ret_obj, js_intern!("tds"), &array)?;
         Reflect::set(&ret_obj, js_intern!("ridx"), &JsValue::from_f64(ridx as f64))?;
